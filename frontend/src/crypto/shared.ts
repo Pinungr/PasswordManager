@@ -3,6 +3,7 @@ import {
   exportJWK, generateKeyPair, importJWK,
 } from 'jose'
 import { z } from 'zod'
+import { testCryptoFallback } from './browser'
 
 const coordinate = z.string().regex(/^[A-Za-z0-9_-]{43}$/)
 const publicKey = z.object({ kty: z.literal('EC'), crv: z.literal('P-256'), x: coordinate, y: coordinate }).strict()
@@ -35,9 +36,16 @@ export function getPublicIdentity(identity: PrivateIdentity): PublicIdentity {
 }
 
 async function keyPair(alg: 'ECDH-ES' | 'ES256') {
+  if (testCryptoFallback()) return (await import('./shared-http')).generateHttpKey()
   const { privateKey: key } = await generateKeyPair(alg, { extractable: true, crv: 'P-256' })
   const { kty, crv, x, y, d } = await exportJWK(key)
   return privateKey.parse({ kty, crv, x, y, d })
+}
+
+async function thumbprint(key: PublicIdentity['agreement']) {
+  return testCryptoFallback()
+    ? (await import('./shared-http')).httpThumbprint(key)
+    : calculateJwkThumbprint(key, 'sha256')
 }
 
 export async function generateIdentity(): Promise<PrivateIdentity> {
@@ -48,7 +56,7 @@ export async function generateIdentity(): Promise<PrivateIdentity> {
 export async function fingerprints(identity: PublicIdentity) {
   const keys = publicIdentity.parse(identity)
   const [agreement, signing] = await Promise.all([
-    calculateJwkThumbprint(keys.agreement, 'sha256'), calculateJwkThumbprint(keys.signing, 'sha256'),
+    thumbprint(keys.agreement), thumbprint(keys.signing),
   ])
   return { agreement, signing }
 }
@@ -59,8 +67,13 @@ export async function sealGrant(
 ): Promise<string> {
   const binding = grantScope.parse(bindingInput)
   const recipient = publicKey.parse(recipientKey)
-  if (root.length !== 32 || await calculateJwkThumbprint(recipient, 'sha256') !== binding.recipientKey) {
+  if (root.length !== 32 || await thumbprint(recipient) !== binding.recipientKey) {
     throw new Error('The recipient key does not match its verified fingerprint.')
+  }
+  if (testCryptoFallback()) {
+    const { encryptHttpGrant, signHttpGrant } = await import('./shared-http')
+    const envelope = await encryptHttpGrant(root, binding.recipientKey, recipient)
+    return signHttpGrant({ binding, envelope }, privateKey.parse(signer))
   }
   const [encryptTo, signAs] = await Promise.all([
     importJWK(recipient, 'ECDH-ES'), importJWK(privateKey.parse(signer), 'ES256'),
@@ -79,20 +92,28 @@ export async function openGrant(
 ): Promise<Uint8Array<ArrayBuffer>> {
   const expected = grantScope.parse(expectedInput)
   const sender = publicKey.parse(senderKey)
-  if (await calculateJwkThumbprint(sender, 'sha256') !== coordinate.parse(senderPin)) {
+  if (await thumbprint(sender) !== coordinate.parse(senderPin)) {
     throw new Error('The grantor key does not match its verified fingerprint.')
   }
-  if (await calculateJwkThumbprint(publicPart(recipient), 'sha256') !== expected.recipientKey) {
+  if (await thumbprint(publicPart(recipient)) !== expected.recipientKey) {
     throw new Error('Grant is bound to a different recipient key.')
   }
   if (grant.length > 8192) throw new Error('Grant is too large.')
-  const verifier = await importJWK(sender, 'ES256')
-  const signed = await compactVerify(grant, verifier, { algorithms: ['ES256'] })
-  if (signed.protectedHeader.typ !== signedType) throw new Error('Invalid grant type.')
-  const { binding, envelope } = grantPayload.parse(JSON.parse(decoder.decode(signed.payload)))
+  const http = testCryptoFallback() ? await import('./shared-http') : null
+  let payload: unknown
+  if (http) {
+    payload = http.verifyHttpGrant(grant, sender)
+  } else {
+    const verifier = await importJWK(sender, 'ES256')
+    const signed = await compactVerify(grant, verifier, { algorithms: ['ES256'] })
+    if (signed.protectedHeader.typ !== signedType) throw new Error('Invalid grant type.')
+    payload = JSON.parse(decoder.decode(signed.payload))
+  }
+  const { binding, envelope } = grantPayload.parse(payload)
   for (const key of Object.keys(expected) as Array<keyof GrantScope>) {
     if (binding[key] !== expected[key]) throw new Error('Grant scope does not match.')
   }
+  if (http) return http.decryptHttpGrant(envelope, expected.recipientKey, privateKey.parse(recipient))
   const key = await importJWK(privateKey.parse(recipient), 'ECDH-ES')
   const decrypted = await compactDecrypt(envelope, key, {
     keyManagementAlgorithms: ['ECDH-ES'], contentEncryptionAlgorithms: ['A256GCM'],

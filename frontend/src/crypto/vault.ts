@@ -1,5 +1,6 @@
 import { decode, encode, generateVaultRoot, importVaultRoot } from './record'
 import type { Envelope } from './record'
+import { aesGcm } from './browser'
 
 export interface VaultKeys {
   profile: 1
@@ -36,10 +37,9 @@ function binding(purpose: Purpose, vault: string, owner: string) {
 }
 
 async function wrap(bytes: Uint8Array<ArrayBuffer>, raw: Uint8Array<ArrayBuffer>, additionalData: Uint8Array<ArrayBuffer>): Promise<Envelope> {
-  const key = await crypto.subtle.importKey('raw', bytes, 'AES-GCM', false, ['encrypt'])
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const result = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData, tagLength: 128 }, key, raw)
-  return { version: 1, nonce: encode(iv), ciphertext: encode(new Uint8Array(result)) }
+  const result = await aesGcm('encrypt', bytes, iv, raw, additionalData)
+  return { version: 1, nonce: encode(iv), ciphertext: encode(result) }
 }
 
 async function unwrap(bytes: Uint8Array<ArrayBuffer>, envelope: Envelope, additionalData: Uint8Array<ArrayBuffer>) {
@@ -48,10 +48,7 @@ async function unwrap(bytes: Uint8Array<ArrayBuffer>, envelope: Envelope, additi
   if (envelope.version !== 1 || iv.length !== 12 || ciphertext.length !== 48 || bytes.length !== 32) {
     throw new Error('Invalid key envelope.')
   }
-  const key = await crypto.subtle.importKey('raw', bytes, 'AES-GCM', false, ['decrypt'])
-  return new Uint8Array(await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData, tagLength: 128 }, key, ciphertext,
-  ))
+  return aesGcm('decrypt', bytes, iv, ciphertext, additionalData)
 }
 
 export async function openVault(input: string, vault: PersonalVault, owner: string, recovery: boolean) {

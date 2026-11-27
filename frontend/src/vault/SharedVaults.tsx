@@ -1,11 +1,12 @@
 import { ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { randomUuid } from '../crypto/browser'
 import {
   fingerprints, generateIdentity, getPublicIdentity, openGrant, privateIdentity, sealGrant,
 } from '../crypto/shared'
 import type { PrivateIdentity, PublicIdentity } from '../crypto/shared'
 import { generateVaultRoot, importVaultRoot, openRecord, sealRecord } from '../crypto/record'
-import type { Envelope } from '../crypto/record'
+import type { Envelope, VaultRoot } from '../crypto/record'
 import { api } from '../services/api'
 import type { WireRecord } from './data'
 
@@ -18,7 +19,7 @@ type Account = { id: string; full_name: string; csrf: string; role: string }
 type Team = { id: string; name: string; active: boolean; lead_id: string | null }
 type Member = { id: string; username: string; full_name: string; public_keys: PublicIdentity | null }
 type Access = { user_id: string; username: string; full_name: string; permissions: number }
-type Selected = { vault: SharedVault; root: CryptoKey }
+type Selected = { vault: SharedVault; root: VaultRoot }
 type Plan = { id: string; old_epoch: number; next_epoch: number; members: string[] }
 type RotationItem = Pick<WireRecord, 'id' | 'crypto_version' | 'payload'>
 
@@ -27,7 +28,7 @@ const options = [['View', 1], ['Create', 2], ['Edit', 4], ['Delete', 8], ['Manag
 const failureText = (error: unknown) => error instanceof Error ? error.message : 'Shared vault operation failed.'
 
 export function SharedVaults({ account, root, personalId, back, open, logout }: {
-  account: Account; root: CryptoKey; personalId: string; back: () => void
+  account: Account; root: VaultRoot; personalId: string; back: () => void
   open: (selection: Selected) => void; logout: () => void
 }) {
   const [identity, setIdentity] = useState<PrivateIdentity | null>(null)
@@ -103,7 +104,7 @@ export function SharedVaults({ account, root, personalId, back, open, logout }: 
 
   async function create(form: FormData) {
     if (!identity) return
-    const id = crypto.randomUUID()
+    const id = randomUuid()
     const team = String(form.get('team'))
     const raw = generateVaultRoot()
     try {

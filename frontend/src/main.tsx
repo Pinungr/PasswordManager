@@ -185,4 +185,9 @@ if (persistedTheme === 'light' || persistedTheme === 'dark' || persistedTheme ==
   }).catch(() => {})
 }
 const root = document.getElementById('root')
-if (root) createRoot(root).render(<StrictMode><BrowserRouter><App /></BrowserRouter></StrictMode>)
+if (root) createRoot(root).render(<StrictMode><BrowserRouter>
+  {window.location.protocol === 'http:' && <div className="http-test-warning" role="alert">
+    HTTP test mode. Traffic is unencrypted. Do not store real credentials.
+  </div>}
+  <App />
+</BrowserRouter></StrictMode>)

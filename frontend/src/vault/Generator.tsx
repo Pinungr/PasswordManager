@@ -41,7 +41,8 @@ export function Generator({ copy }: { copy: (value: string) => Promise<void> }) 
       <button type="button" className="primary" disabled={busy || (!passphrase && groups.length === 0)}
         onClick={() => void generate()}>{value ? 'Regenerate' : 'Generate'}</button>
       <button type="button" className="secondary" disabled={!value} onClick={() => {
-        void copy(value).then(() => setStatus('Copied.')).catch(() => setStatus('Clipboard unavailable.'))
+        void copy(value).then(() => setStatus('Copied.')).catch((error: unknown) =>
+          setStatus(error instanceof Error ? error.message : 'Clipboard unavailable.'))
       }}>Copy</button>
     </div>
     {status && <p role="status" className="muted">{status}</p>}

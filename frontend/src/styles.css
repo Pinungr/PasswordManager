@@ -52,6 +52,11 @@ button { cursor: pointer; }
 .signed-in { display: grid; justify-items: start; gap: .75rem; margin-top: 1.5rem; }
 .logout { margin-top: 1rem; }
 .error { color: var(--danger); font-size: .8125rem; }
+.http-test-warning {
+  position: sticky; top: 0; z-index: 20; padding: .65rem 1rem;
+  background: #7f1d1d; color: #fff; text-align: center; font-weight: 650;
+}
+.clipboard-selection { position: fixed; inset: 0 auto auto -10000px; }
 footer { font-size: .75rem; text-align: center; color: var(--subtle); }
 
 .workspace { min-height: 100dvh; display: grid; grid-template-columns: 228px minmax(0, 1fr); }

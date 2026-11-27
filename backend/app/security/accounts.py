@@ -16,6 +16,7 @@ from sqlalchemy.exc import OperationalError
 from app.core.config import ACCOUNT_PASSWORD_MIN_LENGTH
 
 COOKIE = "__Host-securevault"
+HTTP_COOKIE = "securevault-http-test"
 PASSWORDS = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4, hash_len=32)
 KDF_SLOTS = BoundedSemaphore(4)
 
@@ -64,20 +65,21 @@ def matches(password_hash, value):
         KDF_SLOTS.release()
 
 
-def token_hash(token):
-    return hashlib.sha256(b"session\0" + token.encode("ascii")).hexdigest()
+def token_hash(token, *, secure=True):
+    prefix = b"session\0" if secure else b"http-test-session\0"
+    return hashlib.sha256(prefix + token.encode("ascii")).hexdigest()
 
 
 def csrf_token(token):
     return hashlib.sha256(b"csrf\0" + token.encode("ascii")).hexdigest()
 
 
-def add_session(connection, user_id, expires):
+def add_session(connection, user_id, expires, *, secure=True):
     token = secrets.token_urlsafe(32)
     run(
         connection,
         "INSERT INTO user_sessions (token_hash,user_id,expires_at) VALUES (:digest,:user,:expires)",
-        digest=token_hash(token),
+        digest=token_hash(token, secure=secure),
         user=user_id,
         expires=expires,
     )

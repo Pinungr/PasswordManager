@@ -4,7 +4,9 @@ import { Activity, Bell, Clock3, Copy, DatabaseBackup, Eye, FileUp, FolderLock, 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { randomUuid } from '../crypto/browser'
 import { generateVaultRoot, importVaultRoot, openRecord, sealRecord } from '../crypto/record'
+import type { VaultRoot } from '../crypto/record'
 import { newVaultKeys, openVault } from '../crypto/vault'
 import type { PersonalVault as Vault } from '../crypto/vault'
 import { api } from '../services/api'
@@ -30,7 +32,7 @@ const navIcons = {
 } as const
 const fail = (error: unknown) => error instanceof Error ? error.message : 'Request failed.'
 
-async function decrypt(root: CryptoKey, vaultId: string, wire: WireRecord, epoch?: number): Promise<VaultRecord> {
+async function decrypt(root: VaultRoot, vaultId: string, wire: WireRecord, epoch?: number): Promise<VaultRecord> {
   const bytes = await openRecord(root, { vaultId, recordId: wire.id, version: wire.crypto_version, epoch }, wire.payload)
   try {
     return { ...wire, value: credential.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))) }
@@ -42,7 +44,7 @@ async function decrypt(root: CryptoKey, vaultId: string, wire: WireRecord, epoch
 function VaultGate({ info, account, unlocked, created, changing, cancelChange }: {
   info: VaultInfo
   account: Account
-  unlocked: (key: CryptoKey) => void
+  unlocked: (key: VaultRoot) => void
   created: (vault: Vault) => void
   changing: boolean
   cancelChange: () => void
@@ -50,7 +52,7 @@ function VaultGate({ info, account, unlocked, created, changing, cancelChange }:
   const [recover, setRecover] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [pending, setPending] = useState<{ key: CryptoKey; code: string } | null>(null)
+  const [pending, setPending] = useState<{ key: VaultRoot; code: string } | null>(null)
   const creating = info.vault === null
   const recovering = !creating && recover
   const replacing = recovering || changing
@@ -72,7 +74,7 @@ function VaultGate({ info, account, unlocked, created, changing, cancelChange }:
         unlocked(await importVaultRoot(raw))
         return
       }
-      const id = info.vault?.id ?? crypto.randomUUID()
+      const id = info.vault?.id ?? randomUuid()
       raw = info.vault ? await openVault(input, info.vault, account.id, recovering) : generateVaultRoot()
       const envelope = await newVaultKeys(newPassword, id, account.id, raw)
       const revision = info.vault?.revision ?? 0
@@ -115,6 +117,28 @@ function VaultGate({ info, account, unlocked, created, changing, cancelChange }:
 }
 
 async function copySecret(value: string, seconds: number) {
+  if (!navigator.clipboard) {
+    if (window.location.protocol !== 'http:') throw new Error('Clipboard access is unavailable.')
+    const previousFocus = document.activeElement
+    const selection = document.createElement('textarea')
+    selection.value = value
+    selection.readOnly = true
+    selection.className = 'clipboard-selection'
+    document.body.append(selection)
+    let copied = false
+    try {
+      selection.select()
+      copied = document.execCommand('copy')
+    } catch {
+      // The browser can block legacy clipboard writes even from a user click.
+    } finally {
+      selection.remove()
+      if (previousFocus instanceof HTMLElement) previousFocus.focus()
+    }
+    if (copied) return
+    window.prompt('Copy this test value manually with Ctrl+C.', value)
+    throw new Error('Automatic copying is unavailable in this browser.')
+  }
   await navigator.clipboard.writeText(value)
   const hash = async (text: string) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
   const written = await hash(value)
@@ -162,7 +186,7 @@ function Fields({ value, limits, action, notice }: {
 }
 
 function Workspace({ root, vault, account, limits, lock, logout, settings, master, shared, switchVaults }: {
-  root: CryptoKey; vault: { id: string }; account: Account; limits: Limits
+  root: VaultRoot; vault: { id: string }; account: Account; limits: Limits
   lock: () => void; logout: () => void; settings: () => void; master: () => void
   shared?: SharedVault; switchVaults: () => void
 }) {
@@ -262,7 +286,7 @@ function Workspace({ root, vault, account, limits, lock, logout, settings, maste
     sort === 'modified' ? b.modified_at - a.modified_at : a.value.name.localeCompare(b.value.name))
 
   async function save(value: Credential, previous?: VaultRecord, importing = false) {
-    const id = previous?.id ?? crypto.randomUUID()
+    const id = previous?.id ?? randomUuid()
     const version = (previous?.version ?? 0) + 1
     const plain = new TextEncoder().encode(JSON.stringify(value))
     try {
@@ -478,9 +502,9 @@ export function PersonalWorkspace({ account, logout, settings }: { account: Acco
   const [info, setInfo] = useState<VaultInfo | null>(null)
   const [changing, setChanging] = useState(false)
   const [sharedMenu, setSharedMenu] = useState(false)
-  const [sharedSelection, setSharedSelection] = useState<{ vault: SharedVault; root: CryptoKey } | null>(null)
+  const [sharedSelection, setSharedSelection] = useState<{ vault: SharedVault; root: VaultRoot } | null>(null)
   function lock() { setSharedSelection(null); setSharedMenu(false); setRoot(null) }
-  const [root, setRoot] = useState<CryptoKey | null>(null)
+  const [root, setRoot] = useState<VaultRoot | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     let gone = false

@@ -181,8 +181,8 @@ def create_app(
     async def security(request: Request, call_next):
         if request.headers.getlist("host") != [settings.authority]:
             response = JSONResponse({"detail": "Invalid host"}, status_code=400)
-        elif request.url.scheme != "https":
-            response = JSONResponse({"detail": "HTTPS required"}, status_code=400)
+        elif request.url.scheme != settings.protocol:
+            response = JSONResponse({"detail": f"{settings.protocol.upper()} required"}, status_code=400)
         elif (
             backups
             and request.method not in {"GET", "HEAD"}
@@ -199,7 +199,8 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+        if settings.protocol == "https" and request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Cache-Control"] = "no-store"
         return response
 

@@ -4,7 +4,7 @@
 
 ### Linux
 
-Install Docker with the Compose plugin, Git, and OpenSSL. The [`.env_example`](.env_example) template lists the four variables. The commands below clone the repo and create a private `.env` with fresh values.
+Install Docker with the Compose plugin, Git, and OpenSSL. The [`.env_example`](.env_example) template lists required values and optional settings. The commands below clone the repo and create a private `.env` for a fresh installation. Keep the original encryption keys when updating an existing installation.
 
 ```sh
 git clone https://github.com/Pinungr/PasswordManager.git
@@ -39,7 +39,34 @@ rmdir "$ca_dir"
 sudo update-ca-certificates
 ```
 
-For other Linux distributions or a browser that manages its own certificate store, import the same CA file into the trusted authorities. For network access, set `SECUREVAULT_HOST_MODE=network`, `SECUREVAULT_HOSTNAME`, and `SECUREVAULT_PUBLISH_IP` in `.env`. Place an approved certificate for that hostname, its private key, and its CA bundle in `deploy/tls` as `tls-cert.pem`, `tls-key.pem`, and `tls-ca.pem`. The container user (UID 10001) needs read access to those files.
+For other Linux distributions or a browser that manages its own certificate store, import the same CA file into the trusted authorities.
+
+#### HTTPS on a Linux network
+
+Keep `SECUREVAULT_PROTOCOL=https` and `SECUREVAULT_ENVIRONMENT=production`. Set `SECUREVAULT_HOST_MODE=network`, `SECUREVAULT_HOSTNAME` to the browser-facing name or IP, and `SECUREVAULT_PUBLISH_IP` to the server interface address. Place an approved certificate for that hostname, its private key, and its CA bundle in `deploy/tls` as `tls-cert.pem`, `tls-key.pem`, and `tls-ca.pem`. The container user (UID 10001) needs read access to those files. Run `docker compose up -d --build --wait` and open the configured HTTPS URL.
+
+#### HTTP-only testing on Linux
+
+Use this mode on a trusted test network with synthetic accounts and credentials. HTTP exposes sign-in passwords, session cookies, and application traffic in transit. Use a separate test deployment and volume from any vault holding real credentials.
+
+Create or reuse the test deployment's private `.env` with its own encryption keys. Replace `192.0.2.10` in both examples below with your Linux server's actual test-network IP.
+
+```ini
+SECUREVAULT_PROTOCOL=http
+SECUREVAULT_ENVIRONMENT=development
+SECUREVAULT_HOST_MODE=network
+SECUREVAULT_HOSTNAME=192.0.2.10
+SECUREVAULT_PUBLISH_IP=192.0.2.10
+SECUREVAULT_PUBLISH_PORT=18443
+```
+
+```sh
+docker compose -p pinaki-securevault-http up -d --build --wait
+```
+
+Use the same Compose project name on subsequent starts to keep the test volume. For an existing dedicated test deployment, keep its current project name and volume. Allow TCP port 18443 from the Windows test machine in the Linux host firewall and open `http://<server-ip>:18443/` in the Windows browser. This mode starts directly over HTTP. The app tries legacy clipboard copying if the browser Clipboard API is unavailable. If the browser also blocks the legacy method, copy from the prompt manually. Automatic clipboard clearing requires the browser Clipboard API.
+
+To troubleshoot HTTP startup, run `docker compose -p pinaki-securevault-http ps` and `docker compose -p pinaki-securevault-http logs --tail 80 securevault`. On the server, use `curl -f http://<server-ip>:18443/health/ready`. If the server responds but Windows cannot connect, check the server interface, published port, and firewall. If sign-in is denied, use the configured protocol, hostname and port exactly. When moving an existing test URL from HTTPS, check whether browser HTTPS-only settings or a previously cached HSTS policy are upgrading the request.
 
 ### Windows
 

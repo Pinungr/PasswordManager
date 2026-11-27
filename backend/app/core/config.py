@@ -17,6 +17,7 @@ class Settings(BaseModel):
 
     app_name: Literal["Pinaki SecureVault"] = "Pinaki SecureVault"
     environment: Literal["production", "development"] = "production"
+    protocol: Literal["http", "https"] = "https"
     host_mode: Literal["local", "network"] = "local"
     hostname: str = "localhost"
     https_port: int = Field(18443, ge=1, le=65535)
@@ -67,6 +68,8 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def hosting_mode(self) -> Self:
+        if self.protocol == "http" and self.environment != "development":
+            raise ValueError("HTTP requires SECUREVAULT_ENVIRONMENT=development")
         loopback = self.hostname in {"localhost", "127.0.0.1", "::1"}
         if (self.host_mode == "local") != loopback:
             raise ValueError("hostname must match the selected host mode")
@@ -75,11 +78,12 @@ class Settings(BaseModel):
     @property
     def authority(self) -> str:
         host = f"[{self.hostname}]" if ":" in self.hostname else self.hostname
-        return host if self.https_port == 443 else f"{host}:{self.https_port}"
+        default_port = 443 if self.protocol == "https" else 80
+        return host if self.https_port == default_port else f"{host}:{self.https_port}"
 
     @property
     def origin(self) -> str:
-        return f"https://{self.authority}"
+        return f"{self.protocol}://{self.authority}"
 
 
 def load_settings() -> Settings:

@@ -3,7 +3,9 @@ WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-RUN npm run build
+RUN npm run build \
+    && cp node_modules/@noble/ciphers/LICENSE dist/assets/noble-ciphers.LICENSE.txt \
+    && cp node_modules/@noble/curves/LICENSE dist/assets/noble-curves.LICENSE.txt
 
 FROM python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89 AS python-dependencies
 RUN python -m venv /opt/venv
@@ -20,10 +22,12 @@ RUN addgroup -g 10001 securevault \
     && install -d -m 0700 -o 10001 -g 10001 /data /data/database /data/backups /data/logs
 WORKDIR /app/backend
 COPY --from=python-dependencies /opt/venv /opt/venv
-COPY backend/app ./app
-COPY backend/alembic.ini ./
-COPY backend/migrations ./migrations
-COPY --from=frontend /build/dist /app/frontend/dist
+COPY --chown=10001:10001 backend/app ./app
+COPY --chown=10001:10001 backend/alembic.ini ./
+COPY --chown=10001:10001 backend/migrations ./migrations
+COPY --from=frontend --chown=10001:10001 /build/dist /app/frontend/dist
+RUN chown -R 10001:10001 /app \
+    && chmod -R u+rX /app
 USER 10001:10001
 EXPOSE 8443
 HEALTHCHECK --interval=30s --timeout=7s --start-period=30s --retries=3 CMD ["python", "-m", "app.healthcheck"]

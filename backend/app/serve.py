@@ -25,7 +25,10 @@ def main() -> None:
     frontend = ROOT / "frontend" / "dist"
     if not (frontend / "index.html").is_file():
         raise RuntimeError("Build the frontend before starting SecureVault")
-    certificate, private_key, _ = tls_paths(data, settings.host_mode, initialize=True)
+    tls = {}
+    if settings.protocol == "https":
+        certificate, private_key, _ = tls_paths(data, settings.host_mode, initialize=True)
+        tls = {"ssl_certfile": str(certificate), "ssl_keyfile": str(private_key)}
     uvicorn.run(
         create_app(
             settings,
@@ -37,14 +40,13 @@ def main() -> None:
         ),
         host=os.environ.get("SECUREVAULT_INTERNAL_HOST", "127.0.0.1"),
         port=int(os.environ.get("SECUREVAULT_INTERNAL_PORT", str(settings.https_port))),
-        ssl_certfile=str(certificate),
-        ssl_keyfile=str(private_key),
         access_log=False,
         log_level=settings.log_level.lower(),
         proxy_headers=False,
         server_header=False,
         timeout_graceful_shutdown=20,
         limit_concurrency=128,
+        **tls,
     )
 
 

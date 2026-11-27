@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from app.api.contracts import ChangePassword, Login, NewUser, Signup
 from app.security.accounts import (
     COOKIE,
+    HTTP_COOKIE,
     PASSWORDS,
     add_session,
     audit,
@@ -29,7 +30,8 @@ def same_origin(request):
 
 
 def authenticate(request, connection, *, allow_temporary=False, admin=False):
-    token = request.cookies.get(COOKIE, "")
+    secure = request.app.state.settings.protocol == "https"
+    token = request.cookies.get(COOKIE if secure else HTTP_COOKIE, "")
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
         raise HTTPException(401, "Sign in required.")
     row = (
@@ -37,7 +39,7 @@ def authenticate(request, connection, *, allow_temporary=False, admin=False):
             connection,
             """SELECT u.*, s.expires_at FROM user_sessions s JOIN users u ON u.id=s.user_id
            WHERE s.token_hash=:digest AND s.expires_at>:now AND u.active=1""",
-            digest=token_hash(token),
+            digest=token_hash(token, secure=secure),
             now=now(),
         )
         .mappings()
@@ -71,8 +73,15 @@ def public_session(row, token, expires_at):
     }
 
 
-def cookie(response, token, ttl):
-    response.set_cookie(COOKIE, token, secure=True, httponly=True, samesite="strict", max_age=ttl)
+def cookie(response, token, ttl, *, secure):
+    response.set_cookie(
+        COOKIE if secure else HTTP_COOKIE,
+        token,
+        secure=secure,
+        httponly=True,
+        samesite="strict",
+        max_age=ttl,
+    )
 
 
 def scope(label, value):
@@ -121,6 +130,7 @@ def signup(data: Signup, request: Request, response: Response):
     same_origin(request)
     state = request.app.state
     settings = state.settings
+    secure = settings.protocol == "https"
     source = request.client.host if request.client else "unknown"
     key = scope("signup", source)
     threshold = settings.max_login_attempts
@@ -145,9 +155,9 @@ def signup(data: Signup, request: Request, response: Response):
         moment = now()
         run(connection, "UPDATE users SET last_login=:now WHERE id=:id", now=moment, id=user_id)
         row = read_login(connection, user.username)
-        token = add_session(connection, user_id, moment + ttl)
+        token = add_session(connection, user_id, moment + ttl, secure=secure)
         audit(connection, state.audit_key, "auth.login", user_id, source=source)
-    cookie(response, token, ttl)
+    cookie(response, token, ttl, secure=secure)
     return public_session(row, token, moment + ttl)
 
 
@@ -156,6 +166,7 @@ def login(data: Login, request: Request, response: Response):
     same_origin(request)
     state = request.app.state
     settings = state.settings
+    secure = settings.protocol == "https"
     source = request.client.host if request.client else "unknown"
     user_scope = scope("username", data.username)
     scopes = (
@@ -182,7 +193,7 @@ def login(data: Login, request: Request, response: Response):
             run(
                 connection, "UPDATE users SET last_login=:now WHERE id=:id", now=moment, id=fresh.id
             )
-            token = add_session(connection, fresh.id, moment + ttl)
+            token = add_session(connection, fresh.id, moment + ttl, secure=secure)
             audit(connection, state.audit_key, "auth.login", fresh.id, source=source)
         else:
             run(connection, "DELETE FROM login_limits WHERE expires_at<=:now", now=moment)
@@ -198,7 +209,7 @@ def login(data: Login, request: Request, response: Response):
             )
     if token is None:
         raise denied
-    cookie(response, token, ttl)
+    cookie(response, token, ttl, secure=secure)
     return public_session(fresh, token, moment + ttl)
 
 
@@ -212,16 +223,18 @@ def session(request: Request):
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response):
     state = request.app.state
+    secure = state.settings.protocol == "https"
     with write(state.engine) as connection:
         row, token = authenticate(request, connection, allow_temporary=True)
-        run(connection, "DELETE FROM user_sessions WHERE token_hash=:id", id=token_hash(token))
+        run(connection, "DELETE FROM user_sessions WHERE token_hash=:id", id=token_hash(token, secure=secure))
         audit(connection, state.audit_key, "auth.logout", row.id)
-    response.delete_cookie(COOKIE, secure=True, httponly=True, samesite="strict")
+    response.delete_cookie(COOKIE if secure else HTTP_COOKIE, secure=secure, httponly=True, samesite="strict")
 
 
 @router.post("/password")
 def change_password(data: ChangePassword, request: Request, response: Response):
     state = request.app.state
+    secure = state.settings.protocol == "https"
     with state.engine.connect() as connection:
         user, _ = authenticate(request, connection, allow_temporary=True)
     if not matches(user.password_hash, data.current_password):
@@ -242,10 +255,10 @@ def change_password(data: ChangePassword, request: Request, response: Response):
         )
         run(connection, "DELETE FROM user_sessions WHERE user_id=:id", id=fresh.id)
         expires = now() + ttl
-        token = add_session(connection, fresh.id, expires)
+        token = add_session(connection, fresh.id, expires, secure=secure)
         audit(connection, state.audit_key, "account.password_change", fresh.id)
         row = read_login(connection, fresh.username)
-    cookie(response, token, ttl)
+    cookie(response, token, ttl, secure=secure)
     return public_session(row, token, expires)
 
 

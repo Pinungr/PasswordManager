@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { randomUuid } from '../crypto/browser'
 import type { Envelope } from '../crypto/record'
 
 export const fieldType = z.enum(['text', 'secret', 'multiline', 'url'])
@@ -47,7 +48,7 @@ export type CatalogEntry = { id: string; name: string; active: boolean }
 export type VaultRecord = WireRecord & { value: Credential }
 
 export function emptyField(label = '', type: FieldType = 'secret'): Field {
-  return { id: crypto.randomUUID(), label, type, value: '' }
+  return { id: randomUuid(), label, type, value: '' }
 }
 
 export function blank(): Credential {
