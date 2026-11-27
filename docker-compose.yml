@@ -3,7 +3,7 @@ services:
   securevault:
     image: ${SECUREVAULT_IMAGE:-pinaki-securevault:1.0.0}
     build: .
-    pull_policy: never
+    pull_policy: build
     env_file: ${SECUREVAULT_ENV_FILE:-.env}
     environment:
       SECUREVAULT_PUBLISH_IP: "${SECUREVAULT_PUBLISH_IP:-127.0.0.1}"

@@ -2,7 +2,48 @@
 
 ## Deploy with Docker Compose
 
-On a fresh Windows installation, open PowerShell 7.4 or later in the project directory with Docker Desktop running in Linux container mode.
+### Linux
+
+Install Docker with the Compose plugin, Git, and OpenSSL. Clone the repo and create a private `.env` for a fresh installation.
+
+```sh
+git clone https://github.com/Pinungr/PasswordManager.git
+cd PasswordManager
+(
+  set -euC
+  umask 077
+  database_key=$(openssl rand -hex 32)
+  audit_key=$(openssl rand -hex 32)
+  backup_key=$(openssl rand -hex 32)
+  bootstrap_password=$(openssl rand -hex 16)
+  cat > .env <<EOF
+SECUREVAULT_DATABASE_KEY=$database_key
+SECUREVAULT_AUDIT_KEY=$audit_key
+SECUREVAULT_BACKUP_KEY=$backup_key
+SECUREVAULT_BOOTSTRAP_PASSWORD=$bootstrap_password
+EOF
+)
+docker compose up -d --wait
+```
+
+Compose builds the image on the first run. The app creates the `admin` account and initializes SQLCipher and localhost HTTPS in the Docker data volume. Use the bootstrap password in `.env` to sign in at [https://localhost:18443/](https://localhost:18443/), then change it when prompted. After changing it, remove `SECUREVAULT_BOOTSTRAP_PASSWORD` from `.env`.
+
+Before opening the UI, trust the generated local CA on the machine running your browser. On Debian or Ubuntu, run the following on the Docker host and restart the browser.
+
+```sh
+ca_dir=$(mktemp -d)
+docker compose cp securevault:/data/tls/tls-ca.pem "$ca_dir/pinaki-securevault-ca.crt"
+sudo install -m 0644 "$ca_dir/pinaki-securevault-ca.crt" /usr/local/share/ca-certificates/pinaki-securevault-ca.crt
+rm "$ca_dir/pinaki-securevault-ca.crt"
+rmdir "$ca_dir"
+sudo update-ca-certificates
+```
+
+For other Linux distributions or a browser that manages its own certificate store, import the same CA file into the trusted authorities. For network access, set `SECUREVAULT_HOST_MODE=network`, `SECUREVAULT_HOSTNAME`, and `SECUREVAULT_PUBLISH_IP` in `.env`. Place an approved certificate for that hostname, its private key, and its CA bundle in `deploy/tls` as `tls-cert.pem`, `tls-key.pem`, and `tls-ca.pem`. The container user (UID 10001) needs read access to those files.
+
+### Windows
+
+Open PowerShell 7.4 or later in the project directory with Docker Desktop running in Linux container mode.
 
 ```powershell
 .\scripts\new-local-tls.ps1 -TrustForCurrentUser
@@ -11,15 +52,11 @@ On a fresh Windows installation, open PowerShell 7.4 or later in the project dir
 
 Approve the SecureVault CA in the Windows trust prompt. The installer creates a private `.env` and prompts you to create the first administrator. Enter `admin` as the username and choose an initial password. Open [SecureVault](https://localhost:18443/) and change that password at first sign-in.
 
-For an existing installation, keep its `.env`, TLS files, and Docker data volume. Build and start the app from the project directory.
+For an existing installation, keep its `.env`, TLS files, and Docker data volume. Start or update the app from the project directory.
 
 ```sh
-docker compose up -d --build --wait
+docker compose up -d --wait
 ```
-
-On Linux, place your certificate, private key, and CA trust bundle in `deploy/tls` as `tls-cert.pem`, `tls-key.pem`, and `tls-ca.pem`. Ensure the container user (UID 10001) can read them. Set `SECUREVAULT_DATABASE_KEY`, `SECUREVAULT_AUDIT_KEY`, and `SECUREVAULT_BACKUP_KEY` in a private `.env`. Generate each key separately with `openssl rand -hex 32`. Run the Compose command above, then run `docker compose exec securevault python -m app.bootstrap` to create the administrator. For network access, use a certificate for the configured hostname and set `SECUREVAULT_HOST_MODE=network`, `SECUREVAULT_HOSTNAME`, and `SECUREVAULT_PUBLISH_IP` in `.env`.
-
-You can also set `SECUREVAULT_BOOTSTRAP_PASSWORD` in `.env` to create the default `admin` account automatically on an empty database. After the first sign-in and password change, remove the bootstrap value from `.env`.
 
 ## Connect to the database
 
