@@ -4,7 +4,7 @@
 
 ### Linux
 
-Install Docker with the Compose plugin, Git, and OpenSSL. Clone the repo and create a private `.env` for a fresh installation.
+Install Docker with the Compose plugin, Git, and OpenSSL. The [`.env_example`](.env_example) template lists the four variables. The commands below clone the repo and create a private `.env` with fresh values.
 
 ```sh
 git clone https://github.com/Pinungr/PasswordManager.git
