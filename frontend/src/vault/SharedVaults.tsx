@@ -1,5 +1,6 @@
 import { ShieldCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { HttpTestMode } from '../components/ui/HttpTestMode'
 import { randomUuid } from '../crypto/browser'
 import {
   fingerprints, generateIdentity, getPublicIdentity, openGrant, privateIdentity, sealGrant,
@@ -219,8 +220,11 @@ export function SharedVaults({ account, root, personalId, back, open, logout }: 
     </aside>
     <main className="workspace-main">
       <header className="vault-header"><h1>Shared vaults</h1>
-        {identity && controlledTeams.length > 0 && <button className="primary" disabled={busy}
-          onClick={() => { setCreating(!creating); setSelected(null) }}>Create shared vault</button>}
+        <div className="actions">
+          <HttpTestMode />
+          {identity && controlledTeams.length > 0 && <button className="primary" disabled={busy}
+            onClick={() => { setCreating(!creating); setSelected(null) }}>Create shared vault</button>}
+        </div>
       </header>
       {error && <p role="alert" className="workspace-message error">{error}</p>}
       {loading ? <p role="status">Loading shared vaults…</p> : !identity ? <section className="vault-panel editor">

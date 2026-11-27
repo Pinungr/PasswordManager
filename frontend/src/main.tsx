@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { BrowserRouter } from 'react-router-dom'
 import { z } from 'zod'
 import { Button } from './components/ui/Button'
+import { HttpTestMode } from './components/ui/HttpTestMode'
 import { api } from './services/api'
 import './styles.css'
 
@@ -148,7 +149,10 @@ function App() {
   return (
     <main className="account-page">
       <section className="account-card">
-        <div className="brand-mark"><ShieldCheck aria-hidden="true" size={25} /></div>
+        <header className="account-brand">
+          <div className="brand-mark"><ShieldCheck aria-hidden="true" size={25} /></div>
+          <HttpTestMode />
+        </header>
         <h1>{change ? 'Change account password' : signingUp ? 'Create your account' : 'Pinaki SecureVault'}</h1>
         <p className="account-description">
           {change ? 'Choose a new password to continue.'
@@ -185,9 +189,4 @@ if (persistedTheme === 'light' || persistedTheme === 'dark' || persistedTheme ==
   }).catch(() => {})
 }
 const root = document.getElementById('root')
-if (root) createRoot(root).render(<StrictMode><BrowserRouter>
-  {window.location.protocol === 'http:' && <div className="http-test-warning" role="alert">
-    HTTP test mode. Traffic is unencrypted. Do not store real credentials.
-  </div>}
-  <App />
-</BrowserRouter></StrictMode>)
+if (root) createRoot(root).render(<StrictMode><BrowserRouter><App /></BrowserRouter></StrictMode>)

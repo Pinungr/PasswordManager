@@ -4,6 +4,7 @@ import { Activity, Bell, Clock3, Copy, DatabaseBackup, Eye, FileUp, FolderLock, 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { HttpTestMode } from '../components/ui/HttpTestMode'
 import { randomUuid } from '../crypto/browser'
 import { generateVaultRoot, importVaultRoot, openRecord, sealRecord } from '../crypto/record'
 import type { VaultRoot } from '../crypto/record'
@@ -88,7 +89,10 @@ function VaultGate({ info, account, unlocked, created, changing, cancelChange }:
   }
 
   return <section className="account-card">
-    <div className="brand-mark"><ShieldCheck size={25} aria-hidden="true" /></div>
+    <header className="account-brand">
+      <div className="brand-mark"><ShieldCheck size={25} aria-hidden="true" /></div>
+      <HttpTestMode />
+    </header>
     <h1>{pending ? 'Save your recovery key' : creating ? 'Set up your vault' : changing ? 'Change vault master password' : recovering ? 'Recover your vault' : 'Unlock your vault'}</h1>
     {pending ? <div className="account-form">
       <p className="muted">Save this recovery key in a secure place outside SecureVault. It is displayed once.</p>
@@ -372,6 +376,7 @@ function Workspace({ root, vault, account, limits, lock, logout, settings, maste
       <header className="vault-header">
         <h1>{shared && tab === 'My vault' ? shared.name : tab}</h1>
         <div className="actions">
+          <HttpTestMode />
           <button type="button" aria-label="Search vault (Ctrl+K)" className="secondary" onClick={() => {
             switchTab('My vault'); setFocusSearch(true)
           }}>Search <kbd>Ctrl K</kbd></button>
