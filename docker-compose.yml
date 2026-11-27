@@ -1,0 +1,27 @@
+name: pinaki-securevault
+services:
+  securevault:
+    image: ${SECUREVAULT_IMAGE:-pinaki-securevault:1.0.0}
+    build: .
+    pull_policy: never
+    env_file: ${SECUREVAULT_ENV_FILE:-.env}
+    environment:
+      SECUREVAULT_PUBLISH_IP: "${SECUREVAULT_PUBLISH_IP:-127.0.0.1}"
+      SECUREVAULT_PUBLISH_PORT: "${SECUREVAULT_PUBLISH_PORT:-18443}"
+    ports:
+      - target: 8443
+        published: "${SECUREVAULT_PUBLISH_PORT:-18443}"
+        host_ip: "${SECUREVAULT_PUBLISH_IP:-127.0.0.1}"
+    volumes:
+      - data:/data
+      - "${SECUREVAULT_TLS_DIRECTORY:-./deploy/tls}:/tls:ro"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2
+    mem_limit: 2g
+    init: true
+    restart: "on-failure:3"
+volumes:
+  data:
