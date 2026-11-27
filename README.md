@@ -4,7 +4,7 @@
 
 ### Linux
 
-Install Docker with the Compose plugin, Git, and OpenSSL. The [`.env_example`](.env_example) template lists required values and optional settings. The commands below clone the repo and create a private `.env` for a fresh installation. Keep the original encryption keys when updating an existing installation.
+Install Docker with the Compose plugin, Git, and OpenSSL. The [`.env_example`](.env_example) template has the same four active variables as the default local `.env`, with blank values for secrets and commented optional settings. The commands below clone the repo and create a private `.env` for a fresh installation. Keep the original encryption keys when updating an existing installation.
 
 ```sh
 git clone https://github.com/Pinungr/PasswordManager.git
